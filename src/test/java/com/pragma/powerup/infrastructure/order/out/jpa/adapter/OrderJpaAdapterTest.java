@@ -9,9 +9,7 @@ import com.pragma.powerup.infrastructure.client.model.messaging.IMessageMapper;
 import com.pragma.powerup.infrastructure.client.model.messaging.Messaging;
 import com.pragma.powerup.infrastructure.employee.out.jpa.entity.EmployeeEntity;
 import com.pragma.powerup.infrastructure.employee.out.jpa.repository.IEmployeeRepository;
-import com.pragma.powerup.infrastructure.exception.AlreadyStatusOrderIsInProcessException;
-import com.pragma.powerup.infrastructure.exception.NoDataFoundException;
-import com.pragma.powerup.infrastructure.exception.StatusOrderIsInProcessException;
+import com.pragma.powerup.infrastructure.exception.*;
 import com.pragma.powerup.infrastructure.order.out.jpa.entity.OrderEntity;
 import com.pragma.powerup.infrastructure.order.out.jpa.mapper.IOrderEntityMapper;
 import com.pragma.powerup.infrastructure.order.out.jpa.repository.IOrderRepository;
@@ -338,8 +336,9 @@ class OrderJpaAdapterTest {
                 StatusOrderIsInProcessException.class, () -> orderJpaAdapter.updateStatusPendingOrder(idOrder, status));
 
     }
+
     @Test
-    void mustSendMessageClientOrderReady(){
+    void mustSendMessageClientOrderReady() {
         //GIVEN
         //Yo como usuario de la plazoleta quiero notificarle al cliente que el pedido ya se
         //encuentra listo
@@ -365,6 +364,167 @@ class OrderJpaAdapterTest {
         orderJpaAdapter.sendMessageClientOrderReady(status, messageModel);
         verify(userClient).getUser(eq(token), any());
         verify(messagingClient).sendMessaging(eq(messaging));
+    }
+
+    @Test
+    void throwNoDataFoundExceptionWhenAttemptSendMessageClientOrderReadyAndOrderIsNotFound() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero notificar al cliente que la orden
+        //ya esta lista pero la orden no existe
+        String status = "LISTO";
+        MessageModel messageModel = messageModel();
+        Messaging messaging = messaging();
+
+        //When
+        //le envio el id de una orden que no existe
+        when(messageMapper.toMessage(messageModel)).thenReturn(messaging);
+        when(orderRepository.findById(messageModel.getId())).thenReturn(Optional.empty());
+
+        //Then
+        //El sistema me devuelve una excepcion NoDataFoundException
+        assertThrows(
+                NoDataFoundException.class, () -> orderJpaAdapter.sendMessageClientOrderReady(status, messageModel));
+
+    }
+
+    @Test
+    void throwStatusOrderNotIsReadyExceptionWhenAttemptSendMessageClientOrderReadyAndTheOrderIsNotPreparation() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero notificar al cliente que la orden
+        //ya esta lista pero la orden en realidad no tiene ese estado
+        String status = "LISTO";
+        MessageModel messageModel = messageModel();
+        Messaging messaging = messaging();
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
+
+        //When
+        //le envio el id de una orden que no esta lista
+        when(messageMapper.toMessage(messageModel)).thenReturn(messaging);
+        when(orderRepository.findById(messageModel.getId())).thenReturn(orderEntityOpt);
+
+        //Then
+        //El sistema me devuelve una excepcion StatusOrderNotIsReadyException
+        assertThrows(
+                StatusOrderNotIsReadyException.class, () -> orderJpaAdapter.sendMessageClientOrderReady(status, messageModel));
+
+
+    }
+
+    @Test
+    void mustDeliverOrderClient() {
+        //GIVEN
+        //yo como empleado de la plazoleta quiero entragar una orden
+        Integer code = 55555;
+        Long id = 6L;
+        String status = "ENTREGADO";
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityIsReady());
+
+        //When
+        //Envio los datos correctos
+        when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
+        when(messagingClient.validateCode(code, id)).thenReturn(new ResponseEntity<>(HttpStatus.OK));
+        when(orderRepository.save(any(OrderEntity.class))).thenReturn(new OrderEntity());
+
+        //Then
+        //El sistema actualiza el estado a ENTREGADO
+        orderJpaAdapter.deliverOrderClient(code, id, status);
+        verify(messagingClient).validateCode(eq(code), any());
+
+    }
+
+    @Test
+    void throwNoDataFoundExceptionWhenAttemptDeliverOrderClientAndOrderIsNotFound() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero notificar al cliente que la orden
+        //ya esta lista pero la orden no existe
+        Integer code = 55555;
+        Long id = 6L;
+        String status = "ENTREGADO";
+
+        //When
+        //le envio el id de una orden que no existe
+        when(orderRepository.findById(id)).thenReturn(Optional.empty());
+
+        //Then
+        //El sistema me devuelve una excepcion NoDataFoundException
+        assertThrows(
+                NoDataFoundException.class, () -> orderJpaAdapter.deliverOrderClient(code, id, status));
+
+    }
+
+    @Test
+    void throwStatusOrderNotIsReadyExceptionWhenAttemptDeliverOrderClientAndTheOrderIsNotPreparation() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero notificar al cliente que la orden
+        //ya esta lista pero la orden en realidad no tiene ese estado
+        Integer code = 55555;
+        Long id = 6L;
+        String status = "ENTREGADO";
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
+        //When
+        //le envio el id de una orden que no esta lista
+        when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
+
+        //Then
+        //El sistema me devuelve una excepcion StatusOrderNotIsReadyException
+        assertThrows(
+                StatusOrderNotIsReadyException.class, () -> orderJpaAdapter.deliverOrderClient(code, id, status));
+
+    }
+    @Test
+    void mustCancelOrder(){
+        //GIVEN
+        //yo como CLIENTE de la plazoleta quiero cancelar una orden
+        Long id = 6L;
+        String status = "CANCELADO";
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
+
+        //When
+        //Envio los datos correctos
+        when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
+        when(orderRepository.save(any(OrderEntity.class))).thenReturn(new OrderEntity());
+
+        //Then
+        //El sistema actualiza el estado a CANCELADO
+        orderJpaAdapter.cancelOrder(id, status);
+        verify(orderRepository).save(any(OrderEntity.class));
+
+    }
+
+    @Test
+    void throwNoDataFoundExceptionWhenAttemptCancelOrderAndOrderIsNotFound() {
+        //GIVEN
+        //Yo como cliente de la plazoleta quiero cancelar una orden pero la orden no existe
+        Long id = 6L;
+        String status = "CANCELADO";
+
+        //When
+        //le envio el id de una orden que no existe
+        when(orderRepository.findById(id)).thenReturn(Optional.empty());
+
+        //Then
+        //El sistema me devuelve una excepcion NoDataFoundException
+        assertThrows(
+                NoDataFoundException.class, () -> orderJpaAdapter.cancelOrder(id, status));
+
+
+    }
+    @Test
+    void throwStatusOrderInProcessNotCancelExceptionWhenAttemptCancelOrderAndTheOrderIsInProcess(){
+        //GIVEN
+        //Yo como cliente de la plazoleta quiero cancelar una orden pero la orden ya esta en proceso
+        Long id = 6L;
+        String status = "CANCELADO";
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityIsReady());
+
+        //When
+        //le envio el id de una orden que no existe
+        when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
+
+        //Then
+        //El sistema me devuelve una excepcion StatusOrderInProcessNotCancelException
+        assertThrows(
+                StatusOrderInProcessNotCancelException.class, () -> orderJpaAdapter.cancelOrder(id, status));
     }
 
 

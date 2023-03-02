@@ -3,7 +3,6 @@ package com.pragma.powerup.infrastructure.order.input.rest;
 import com.pragma.powerup.application.order.dto.request.OrderRequestDto;
 import com.pragma.powerup.application.order.dto.response.OrderResponseDto;
 import com.pragma.powerup.application.order.handler.IOrderHandler;
-import com.pragma.powerup.application.restaurant.dto.response.RestaurantListResponseDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -45,7 +44,7 @@ public class OrderRestController {
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "orders returned",
                     content = @Content(mediaType = "application/json",
-                            array = @ArraySchema(schema = @Schema(implementation = RestaurantListResponseDto.class)))),
+                            array = @ArraySchema(schema = @Schema(implementation = OrderResponseDto.class)))),
             @ApiResponse(responseCode = "401", description = "Permission denied", content = @Content),
             @ApiResponse(responseCode = "404", description = "Bad Request (e.g., The value is empty," +
                     " The length value is invalid, The number format is invalid)"
@@ -77,8 +76,7 @@ public class OrderRestController {
     @Operation(summary = "notify client")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "notify send",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = OrderResponseDto.class))),
+                    content = @Content),
             @ApiResponse(responseCode = "404", description = "order not exist", content = @Content)
     })
     @PostMapping("/message/{id}")
@@ -92,8 +90,7 @@ public class OrderRestController {
     @Operation(summary = "deliver order")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "deliver order",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = OrderResponseDto.class))),
+                    content = @Content),
             @ApiResponse(responseCode = "404", description = "order not exist", content = @Content)
     })
     @PostMapping("/deliver/{code}/{id}")
@@ -107,8 +104,7 @@ public class OrderRestController {
     @Operation(summary = "cancel order")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "cancel order",
-                    content = @Content(mediaType = "application/json",
-                            schema = @Schema(implementation = OrderResponseDto.class))),
+                    content = @Content),
             @ApiResponse(responseCode = "404", description = "order not exist", content = @Content)
     })
     @PutMapping("/cancel/{id}")

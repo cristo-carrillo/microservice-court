@@ -32,7 +32,9 @@ public class FactoryOrderDataTest {
     public static OrderEntity orderEntity(){
         return new OrderEntity(6L, 17L, Date.from(Instant.now()), "PENDIENTE", 18L,1L);
     }
-
+    public static OrderEntity orderEntityIsReady(){
+        return new OrderEntity(6L, 17L, Date.from(Instant.now()), "LISTO", 18L,1L);
+    }
 
     public static OrderEntity orderEntityUpdateStatusPending(Long idUserEmployee){
         return new OrderEntity(6L, 17L, Date.from(Instant.now()), "EN_PREPARACION", idUserEmployee,1L);
