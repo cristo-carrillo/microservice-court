@@ -92,27 +92,27 @@ public class ControllerAdvisor {
     }
 
 
-//    @ExceptionHandler(AlreadyStatusOrderIsInProcessException.class)
-//    public ResponseEntity<Map<String, String>> handleAlreadyStatusOrderIsInProcessException(
-//            AlreadyStatusOrderIsInProcessException alreadyStatusOrderIsInProcessException){
-//        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-//                .body(Collections.singletonMap(MESSAGE, ExceptionResponse.ALREADY_STATUS_ORDER_IS_IN_PROCESS.getMessage()
-//                        + " : " + alreadyStatusOrderIsInProcessException.getMessage()));
-//    }
-//
-//
-//    @ExceptionHandler(Throwable.class)
-//    public ResponseEntity<Map<String, String>> handleExpiredJwtException(Throwable expiredJwtException){
-//        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
-//          .body(Collections.singletonMap(MESSAGE, ExceptionResponse.EXPIRED_JWT.getMessage()
-//           + " : " + expiredJwtException.getMessage()));
-//    }
-//
-//    @ExceptionHandler(Exception.class)
-//    public ResponseEntity<Map<String, String>> handleException(Exception ignoredException) {
-//
-//        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-//          .body(Collections.singletonMap(MESSAGE, ignoredException.getMessage()));
-//    }
+    @ExceptionHandler(AlreadyStatusOrderIsInProcessException.class)
+    public ResponseEntity<Map<String, String>> handleAlreadyStatusOrderIsInProcessException(
+            AlreadyStatusOrderIsInProcessException alreadyStatusOrderIsInProcessException){
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Collections.singletonMap(MESSAGE, ExceptionResponse.ALREADY_STATUS_ORDER_IS_IN_PROCESS.getMessage()
+                        + " : " + alreadyStatusOrderIsInProcessException.getMessage()));
+    }
+
+
+    @ExceptionHandler(Throwable.class)
+    public ResponseEntity<Map<String, String>> handleExpiredJwtException(Throwable expiredJwtException){
+        return ResponseEntity.status(HttpStatus.NOT_ACCEPTABLE)
+          .body(Collections.singletonMap(MESSAGE, ExceptionResponse.EXPIRED_JWT.getMessage()
+           + " : " + expiredJwtException.getMessage()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<Map<String, String>> handleException(Exception ignoredException) {
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+          .body(Collections.singletonMap(MESSAGE, ignoredException.getMessage()));
+    }
 
 }

@@ -57,7 +57,7 @@ public class PlateRestController {
     }
 
     @RolesAllowed("ROLE_Propietario")
-    @Operation(summary = "update a Plate")
+    @Operation(summary = "update status Plate")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "plate returned",
                     content = @Content(mediaType = "application/json",
