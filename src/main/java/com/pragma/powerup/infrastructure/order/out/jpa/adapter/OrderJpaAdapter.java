@@ -10,10 +10,7 @@ import com.pragma.powerup.infrastructure.client.model.messaging.IMessageMapper;
 import com.pragma.powerup.infrastructure.client.model.messaging.Messaging;
 import com.pragma.powerup.infrastructure.employee.out.jpa.entity.EmployeeEntity;
 import com.pragma.powerup.infrastructure.employee.out.jpa.repository.IEmployeeRepository;
-import com.pragma.powerup.infrastructure.exception.NoDataFoundException;
-import com.pragma.powerup.infrastructure.exception.StatusOrderInProcessNotCancelException;
-import com.pragma.powerup.infrastructure.exception.StatusOrderIsInProcessException;
-import com.pragma.powerup.infrastructure.exception.StatusOrderNotIsReadyException;
+import com.pragma.powerup.infrastructure.exception.*;
 import com.pragma.powerup.infrastructure.order.out.jpa.entity.OrderEntity;
 import com.pragma.powerup.infrastructure.order.out.jpa.mapper.IOrderEntityMapper;
 import com.pragma.powerup.infrastructure.order.out.jpa.repository.IOrderRepository;
@@ -49,18 +46,18 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     @Override
     public OrderModel saveOrder(OrderModel order) {
         Long idUserClient = userClient.getIdUser(request.getHeader("Authorization"), userLoginApplication()).getBody();
-        if(!restaurantRepository.existsById(order.getIdRestaurant())){
+        if (!restaurantRepository.existsById(order.getIdRestaurant())) {
             throw new NoDataFoundException();
         }
         List<EmployeeEntity> employeeEntity = employeeRepository.findByIdRestaurant(order.getIdRestaurant());
-        if(employeeEntity.isEmpty()){
+        if (employeeEntity.isEmpty()) {
             throw new NoDataFoundException();
         }
         List<OrderEntity> orderEntityStatus = orderRepository.findAllByIdClient(idUserClient);
         validateStatusClient(orderEntityStatus.stream().map(o -> o.getStatus()).collect(Collectors.toList()));
         order.setIdChef(employeeEntity.get(0).getRestaurantEmployeePK().getIdPeople());
         order.setIdClient(idUserClient);
-        OrderEntity orderEntity =  orderRepository.save(orderEntityMapper.toOderEntity(order));
+        OrderEntity orderEntity = orderRepository.save(orderEntityMapper.toOderEntity(order));
         List<OrderPlateEntity> orderPlateList = order.getOrderPlates().stream()
                 .peek(orders -> orders.setIdOrder(orderEntity.getId()))
                 .map(orderPlateEntityMapper::toEntity)
@@ -73,14 +70,14 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     public List<OrderModel> listPaginatedOrders(String status, Integer numberElementsPerPage, Integer size) {
         Long idUserEmployee = userClient.getIdUser(request.getHeader("Authorization"), userLoginApplication()).getBody();
         Optional<EmployeeEntity> employeeEntity = employeeRepository.findByIdPeople(idUserEmployee);
-        if(employeeEntity.isEmpty()){
+        if (employeeEntity.isEmpty()) {
             throw new NoDataFoundException();
         }
         List<OrderEntity> listOrders = orderRepository.findAllByIdRestaurantAndStatus(
                 employeeEntity.get().getRestaurantEmployeePK().getIdRestaurant(),
                 status,
                 PageRequest.of(numberElementsPerPage, size)
-                ).toList();
+        ).toList();
 
         return orderEntityMapper.toOrderList(listOrders);
     }
@@ -88,14 +85,21 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     @Override
     public OrderModel updateStatusPendingOrder(Long idOrder, String status) {
         Optional<OrderEntity> orderEntity = orderRepository.findById(idOrder);
-        if(orderEntity.isEmpty()) {
+        if (orderEntity.isEmpty()) {
             throw new NoDataFoundException();
         }
         OrderEntity orderEntityUpdate = orderEntity.get();
-        if(!orderEntityUpdate.getStatus().equals(PENDING.getStatus())){
+        if (!orderEntityUpdate.getStatus().equals(PENDING.getStatus())) {
             throw new StatusOrderIsInProcessException("status " + orderEntityUpdate.getStatus());
         }
         Long idUserEmployee = userClient.getIdUser(request.getHeader("Authorization"), userLoginApplication()).getBody();
+        Optional<EmployeeEntity> employeeEntity = employeeRepository.findByIdPeople(idUserEmployee);
+        if(employeeEntity.isEmpty()){
+            throw new NoDataFoundException();
+        }
+        if(employeeEntity.get().getRestaurantEmployeePK().getIdRestaurant() != orderEntityUpdate.getIdRestaurant()){
+            throw new RestaurantNotIsAssociatedWithTheEmployee("Is not associated with the order");
+        }
         orderEntityUpdate.setStatus(status);
         orderEntityUpdate.setIdChef(idUserEmployee);
         OrderEntity orderUpdated = orderRepository.save(orderEntityUpdate);
@@ -106,12 +110,13 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     public void sendMessageClientOrderReady(String status, MessageModel message) {
         Messaging messaging = messageMapper.toMessage(message);
         Optional<OrderEntity> orderEntityOpt = orderRepository.findById(messaging.getId());
-        if(orderEntityOpt.isEmpty()){
+        if (orderEntityOpt.isEmpty()) {
             throw new NoDataFoundException();
         }
         OrderEntity orderEntity = orderEntityOpt.get();
-        if(!orderEntity.getStatus().equals(IN_PREPARATION.getStatus())){
-            throw new StatusOrderNotIsReadyException("status "+orderEntity.getStatus());
+        validateUserEmployeeWhitUserOrderChef(orderEntity.getIdChef());
+        if (!orderEntity.getStatus().equals(IN_PREPARATION.getStatus())) {
+            throw new StatusOrderNotIsReadyException("status " + orderEntity.getStatus());
         }
         User user = userClient.getUser(request.getHeader("Authorization"), orderEntity.getIdClient()).getBody();
         messaging.setPhoneNumber(user.getPhone());
@@ -123,12 +128,14 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
     @Override
     public void deliverOrderClient(Integer code, Long id, String status) {
         Optional<OrderEntity> orderEntityOpt = orderRepository.findById(id);
-        if(orderEntityOpt.isEmpty()){
+        if (orderEntityOpt.isEmpty()) {
             throw new NoDataFoundException();
         }
+
         OrderEntity orderEntity = orderEntityOpt.get();
-        if(!orderEntity.getStatus().equals(READY.getStatus())){
-            throw new StatusOrderNotIsReadyException("status "+orderEntity.getStatus());
+        validateUserEmployeeWhitUserOrderChef(orderEntity.getIdChef());
+        if (!orderEntity.getStatus().equals(READY.getStatus())) {
+            throw new StatusOrderNotIsReadyException("status " + orderEntity.getStatus());
         }
         messagingClient.validateCode(code, id);
         orderEntity.setStatus(status);
@@ -137,16 +144,27 @@ public class OrderJpaAdapter implements IOrderPersistencePort {
 
     @Override
     public void cancelOrder(Long id, String status) {
+        Long idUserClient = userClient.getIdUser(request.getHeader("Authorization"), userLoginApplication()).getBody();
         Optional<OrderEntity> orderEntityOpt = orderRepository.findById(id);
         if (orderEntityOpt.isEmpty()) {
             throw new NoDataFoundException();
         }
         OrderEntity orderEntity = orderEntityOpt.get();
-        if(!orderEntity.getStatus().equals(PENDING.getStatus())){
-            throw new StatusOrderInProcessNotCancelException("status "+orderEntity.getStatus());
+        if (idUserClient != orderEntity.getIdClient()) {
+            throw new PermissionDeniedException("The order is not associated with the client");
+        }
+        if (!orderEntity.getStatus().equals(PENDING.getStatus())) {
+            throw new StatusOrderInProcessNotCancelException("status " + orderEntity.getStatus());
         }
         orderEntity.setStatus(status);
         orderRepository.save(orderEntity);
+    }
+
+    private void validateUserEmployeeWhitUserOrderChef(Long idEmployeeOrder){
+        Long idUserEmployeeLogin = userClient.getIdUser(request.getHeader("Authorization"), userLoginApplication()).getBody();
+        if (idUserEmployeeLogin != idEmployeeOrder) {
+            throw new PermissionDeniedException("The order is not associated with the employee");
+        }
     }
 
 }

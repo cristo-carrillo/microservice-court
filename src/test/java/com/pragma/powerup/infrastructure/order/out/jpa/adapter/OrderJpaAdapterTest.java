@@ -36,8 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static com.pragma.powerup.factory.FactoryEmployeeDataTest.getEmployeeEntity;
-import static com.pragma.powerup.factory.FactoryEmployeeDataTest.getListEmployees;
+import static com.pragma.powerup.factory.FactoryEmployeeDataTest.*;
 import static com.pragma.powerup.factory.FactoryMessagingDataTest.messageModel;
 import static com.pragma.powerup.factory.FactoryMessagingDataTest.messaging;
 import static com.pragma.powerup.factory.FactoryOrderDataTest.*;
@@ -272,6 +271,7 @@ class OrderJpaAdapterTest {
         String status = "EN_PREPARACION";
         Long idUserEmployee = 3L;
         Optional<OrderEntity> orderEntity = Optional.of(orderEntity());
+        Optional<EmployeeEntity> employeeEntity = Optional.of(getEmployeeEntity());
         OrderEntity orderUpdated = orderEntityUpdateStatusPending(idUserEmployee);
         OrderModel orderModel = orderModelUpdateStatusPending(idUserEmployee);
 
@@ -289,6 +289,7 @@ class OrderJpaAdapterTest {
         when(authentication.getPrincipal()).thenReturn(user);
         when(user.getUsername()).thenReturn(expectedUsername);
         when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
+        when(employeeRepository.findByIdPeople(idUserEmployee)).thenReturn(employeeEntity);
         when(orderRepository.save(any(OrderEntity.class))).thenReturn(orderUpdated);
         when(orderEntityMapper.toOrderModel(orderUpdated)).thenReturn(orderModel);
         //Then
@@ -338,6 +339,71 @@ class OrderJpaAdapterTest {
     }
 
     @Test
+    void throwNoDataFoundExceptionWhenAttemptUpdateStatusPendingOrderAndTheOrderIsTheEmployeeIsNotAssociateToRestaurant() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero actualizar el estado de una order que se encuentra
+        // PENDIENTE a EN_PREPARACION pero no estoy asociado a ningun restaurante
+        Long idOrder = 1L;
+        String status = "EN_PREPARACION";
+        Long idUserEmployee = 5L;
+        Optional<OrderEntity> orderEntity = Optional.of(orderEntity());
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails user = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
+
+
+        //When
+        //El usuario autenticado no esta asociado a un restaurante
+        when(orderRepository.findById(idOrder)).thenReturn(orderEntity);
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(user);
+        when(user.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
+        when(employeeRepository.findByIdPeople(idUserEmployee)).thenReturn(Optional.empty());
+        //Then
+        //El sistema me devuelve una excepcion del tipo NoDataFoundException
+        assertThrows(
+                NoDataFoundException.class, () -> orderJpaAdapter.updateStatusPendingOrder(idOrder, status));
+
+    }
+
+    @Test
+    void throwRestaurantNotIsAssociatedWithTheEmployeeWhenAttemptUpdateStatusPendingOrderAndTheOrderIsTheEmployeeIsNotAssociateToRestaurant() {
+        //GIVEN
+        //Yo como empleado de la plazoleta quiero actualizar el estado de una order que se encuentra
+        // PENDIENTE a EN_PREPARACION pero estoy asociado a un restaurante diferente al de la orden
+        Long idOrder = 1L;
+        String status = "EN_PREPARACION";
+        Long idUserEmployee = 5L;
+        Optional<OrderEntity> orderEntity = Optional.of(orderEntity());
+        Optional<EmployeeEntity> employeeEntity = Optional.of(getEmployeeEntityRestaurantDifferent());
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails user = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
+
+
+        //When
+        //El usuario autenticado no esta asociado a un restaurante
+        when(orderRepository.findById(idOrder)).thenReturn(orderEntity);
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(user);
+        when(user.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
+        when(employeeRepository.findByIdPeople(idUserEmployee)).thenReturn(employeeEntity);
+        //Then
+        //El sistema me devuelve una excepcion del tipo NoDataFoundException
+        assertThrows(
+                RestaurantNotIsAssociatedWithTheEmployee.class, () -> orderJpaAdapter.updateStatusPendingOrder(idOrder, status));
+
+    }
+
+    @Test
     void mustSendMessageClientOrderReady() {
         //GIVEN
         //Yo como usuario de la plazoleta quiero notificarle al cliente que el pedido ya se
@@ -345,16 +411,25 @@ class OrderJpaAdapterTest {
         String status = "LISTO";
         MessageModel messageModel = messageModel();
         Messaging messaging = messaging();
-        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityUpdateStatusPending(messageModel.getId()));
+        Long idUserEmployee = 2L;
+        Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityUpdateStatusPending(idUserEmployee));
         User user = getUser();
-
+        Authentication authentication = mock(Authentication.class);
         String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
+
+
 
         //When
         //Le envio los datos correctamente
         when(messageMapper.toMessage(messageModel)).thenReturn(messaging);
         when(orderRepository.findById(messageModel.getId())).thenReturn(orderEntityOpt);
         when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
         when(userClient.getUser(token, orderEntityOpt.get().getIdClient())).thenReturn(new ResponseEntity<>(user, HttpStatus.OK));
         when(messagingClient.sendMessaging(messaging)).thenReturn(new ResponseEntity<>(HttpStatus.CREATED));
         when(orderRepository.save(any(OrderEntity.class))).thenReturn(new OrderEntity());
@@ -396,12 +471,21 @@ class OrderJpaAdapterTest {
         MessageModel messageModel = messageModel();
         Messaging messaging = messaging();
         Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
+        Long idUserEmployee = 18L;
 
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
         //When
         //le envio el id de una orden que no esta lista
         when(messageMapper.toMessage(messageModel)).thenReturn(messaging);
         when(orderRepository.findById(messageModel.getId())).thenReturn(orderEntityOpt);
-
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
         //Then
         //El sistema me devuelve una excepcion StatusOrderNotIsReadyException
         assertThrows(
@@ -418,10 +502,20 @@ class OrderJpaAdapterTest {
         Long id = 6L;
         String status = "ENTREGADO";
         Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityIsReady());
+        Long idUserEmployee = 18L;
 
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
         //When
         //Envio los datos correctos
         when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
         when(messagingClient.validateCode(code, id)).thenReturn(new ResponseEntity<>(HttpStatus.OK));
         when(orderRepository.save(any(OrderEntity.class))).thenReturn(new OrderEntity());
 
@@ -461,10 +555,21 @@ class OrderJpaAdapterTest {
         Long id = 6L;
         String status = "ENTREGADO";
         Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
+
+        Long idUserEmployee = 18L;
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
         //When
         //le envio el id de una orden que no esta lista
         when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
-
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserEmployee, HttpStatus.OK));
         //Then
         //El sistema me devuelve una excepcion StatusOrderNotIsReadyException
         assertThrows(
@@ -479,8 +584,20 @@ class OrderJpaAdapterTest {
         String status = "CANCELADO";
         Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntity());
 
+        Long idUserClient = 17L;
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
+
         //When
         //Envio los datos correctos
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserClient, HttpStatus.OK));
         when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
         when(orderRepository.save(any(OrderEntity.class))).thenReturn(new OrderEntity());
 
@@ -498,8 +615,19 @@ class OrderJpaAdapterTest {
         Long id = 6L;
         String status = "CANCELADO";
 
+        Long idUserClient = 17L;
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
         //When
         //le envio el id de una orden que no existe
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserClient, HttpStatus.OK));
         when(orderRepository.findById(id)).thenReturn(Optional.empty());
 
         //Then
@@ -517,8 +645,20 @@ class OrderJpaAdapterTest {
         String status = "CANCELADO";
         Optional<OrderEntity> orderEntityOpt = Optional.of(orderEntityIsReady());
 
+        Long idUserClient = 17L;
+
+        Authentication authentication = mock(Authentication.class);
+        String token = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9DbGllbnRlIiwic3ViIjoidGljYUBnbWFpbC5jb20iLCJpYXQiOjE2NzcyODk3OTIsImV4cCI6MTY3NzI5MTIzMn0.ZL7F9K0G0cpsZruLoXkmBEFJJqtwcaSAFWrsXcOxblA";
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetails userDetails = mock(UserDetails.class);
+        String expectedUsername = "employee@gmail.com";
+
         //When
         //le envio el id de una orden que no existe
+        when(request.getHeader("Authorization")).thenReturn(token);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn(expectedUsername);
+        when(userClient.getIdUser(token, userLoginApplication())).thenReturn(new ResponseEntity<>(idUserClient, HttpStatus.OK));
         when(orderRepository.findById(id)).thenReturn(orderEntityOpt);
 
         //Then

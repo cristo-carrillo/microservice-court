@@ -15,6 +15,11 @@ public class FactoryEmployeeDataTest {
                 new RestaurantEmployeePK(1L, 2L)
         );
     }
+    public static EmployeeEntity getEmployeeEntityRestaurantDifferent() {
+        return new EmployeeEntity(
+                new RestaurantEmployeePK(2L, 3L)
+        );
+    }
 
     public static UserEmployeeModel getUserEmployeeModel() {
         return new UserEmployeeModel(
